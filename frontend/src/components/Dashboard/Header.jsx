@@ -9,7 +9,6 @@ const Header = ({ searchTerm, setSearchTerm }) => {
   const handleAvatarClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log('Avatar clicked, currentUser:', currentUser);
     if (currentUser?.id) {
       navigate(`/profile/${currentUser.id}`);
     } else {

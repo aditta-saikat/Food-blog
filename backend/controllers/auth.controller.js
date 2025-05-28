@@ -1,9 +1,9 @@
-
 // controllers/auth.controller.js
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Token = require('../models/Token'); // optional, if storing refresh tokens
+const admin = require('../middleware/firebaseAdmin')
 
 //Helper function generate JWT token
 const generateAccessToken = (user) => {
@@ -91,4 +91,49 @@ exports.logout = async (req, res) => {
   res.clearCookie('refreshToken', { httpOnly: true, sameSite: 'None', secure: true });
   await Token.findOneAndDelete({ refreshToken: req.cookies.refreshToken });
   res.status(200).json({ message: 'Logged out' });
+};
+
+exports.googleSignIn = async (req, res) => {
+  const { idToken } = req.body;
+
+  if (!idToken) {
+    return res.status(400).json({ message: 'No ID token provided' });
+  }
+
+  try {
+    // Verify Firebase ID token
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const { email, name, uid } = decodedToken;
+
+    // Check if user exists in MongoDB
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // Create new user
+      user = new User({
+        username: name || email.split('@')[0],
+        email,
+        googleUid: uid,
+      });
+      await user.save();
+    } else {
+      // Update existing user with Google UID if not set
+      if (!user.googleUid) {
+        user.googleUid = uid;
+        await user.save();
+      }
+    }
+
+    // Generate custom JWT
+    const payload = { id: user._id, email: user.email };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    res.json({
+      token,
+      user: { id: user._id, username: user.username, email: user.email },
+    });
+  } catch (err) {
+    console.error('Google Sign-In Error:', err);
+    res.status(400).json({ message: 'Google authentication failed', error: err.message });
+  }
 };

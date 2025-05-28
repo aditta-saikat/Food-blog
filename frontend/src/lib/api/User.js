@@ -56,3 +56,17 @@ export const deleteUser = async (id) => {
     throw new Error(err.response?.data?.message || 'Failed to delete user');
   }
 };
+
+export const googleSignIn = async (idToken) => {
+  try {
+    const response = await axios.post(
+      `${import.meta.env.VITE_API_URL}/auth/google`,
+      { idToken },
+      { withCredentials: true }
+    );
+    return response.data;
+  } catch (err) {
+    console.error('Error with Google sign-in:', err.response?.data || err.message);
+    throw new Error(err.response?.data?.message || 'Google sign-in failed');
+  }
+};

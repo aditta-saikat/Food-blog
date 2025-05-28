@@ -1,9 +1,18 @@
-// In controllers/userController.js
-
 const User = require('../models/User');
 const fs = require('fs');
 const FormData = require('form-data');
 const fetch = require('node-fetch');
+
+// GET /api/users/me - get current user profile
+exports.getCurrentUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
 
 // GET /api/users/:id - get user profile
 exports.getUser = async (req, res) => {
@@ -23,28 +32,16 @@ exports.updateUser = async (req, res) => {
   }
   
   try {
-    console.log('Server: Received update request');
-    console.log('Body keys:', Object.keys(req.body));
-    console.log('Files:', req.files ? Object.keys(req.files) : 'No files object');
-    
     // Parse text fields from req.body.data
     let { username, bio } = req.body.data ? JSON.parse(req.body.data) : {};
-    
-    console.log('Parsed data:', { username, bio });
+
     
     let avatarUrl = undefined;
     
     // Handle image upload
     if (req.files && req.files.image) {
-      console.log('Server: Processing image upload');
+           
       const file = req.files.image;
-      
-      console.log('Image details:', {
-        name: file.name,
-        size: file.size,
-        mimetype: file.mimetype,
-        hasData: !!file.data
-      });
       
       if (!file.data || !file.name || !file.mimetype) {
         return res.status(400).json({ message: 'Invalid image file' });
@@ -57,15 +54,12 @@ exports.updateUser = async (req, res) => {
       });
       formData.append('key', process.env.IMGBB_API_KEY);
       
-      console.log('Server: Sending request to ImgBB');
-      
       const response = await fetch('https://api.imgbb.com/1/upload', {
         method: 'POST',
         body: formData,
       });
       
       const imgbbResponse = await response.json();
-      console.log('ImgBB response success:', imgbbResponse.success);
       
       if (!imgbbResponse.success) {
         console.error('ImgBB error:', imgbbResponse.error);
@@ -75,7 +69,6 @@ exports.updateUser = async (req, res) => {
       }
       
       avatarUrl = imgbbResponse.data.url;
-      console.log('Image successfully uploaded to:', avatarUrl);
     }
     
     // Only update provided fields
@@ -83,8 +76,6 @@ exports.updateUser = async (req, res) => {
     if (username) updateData.username = username;
     if (bio !== undefined) updateData.bio = bio;
     if (avatarUrl) updateData.avatarUrl = avatarUrl;
-    
-    console.log('Update data:', updateData);
     
     const updated = await User.findByIdAndUpdate(
       req.params.id,
@@ -96,7 +87,6 @@ exports.updateUser = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    console.log('User successfully updated');
     res.json(updated);
   } catch (err) {
     console.error('Error updating user:', err);

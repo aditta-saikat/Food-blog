@@ -8,7 +8,7 @@ router.get('/:id', verifyToken, userController.getUser);
 router.put('/:id',  verifyToken, userController.updateUser);
 router.delete('/:id', verifyToken, userController.deleteUser);
 router.get('/',  verifyToken, userController.getAllUsers); // admin only
-
+router.get('/me', verifyToken, userController.getCurrentUser);
 
 
 

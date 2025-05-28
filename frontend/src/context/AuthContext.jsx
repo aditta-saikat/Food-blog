@@ -17,6 +17,10 @@ export const AuthProvider = ({ children }) => {
   // Add interceptor for adding token to requests
   axios.interceptors.request.use(
     (config) => {
+      // Skip adding Authorization header for Google Sign-In to avoid token mix-up
+      if (config.url.includes('/auth/google')) {
+        return config;
+      }
       const token = localStorage.getItem('accessToken');
       if (token) {
         config.headers['Authorization'] = `Bearer ${token}`;
@@ -31,45 +35,51 @@ export const AuthProvider = ({ children }) => {
     (response) => response,
     async (error) => {
       const originalRequest = error.config;
-      
-      // If error is 403 and not already retrying
-      if (error.response?.status === 403 && !originalRequest._retry) {
+
+      // If error is 403 or 401 and not already retrying
+      if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
         originalRequest._retry = true;
-        
+
         try {
           // Call refresh endpoint
-          const res = await axios.get('/auth/refresh');
+          const res = await axios.get('/auth/refresh', { withCredentials: true });
           localStorage.setItem('accessToken', res.data.accessToken);
-          
+
+          // Update user data if provided
+          if (res.data.user) {
+            localStorage.setItem('userInfo', JSON.stringify(res.data.user));
+            setCurrentUser(res.data.user);
+          }
+
           // Retry the original request
           return axios(originalRequest);
         } catch (err) {
-          // If refresh fails, logout
-          logout();
+          console.error('Token refresh failed:', err);
+          logout(); // Clear session on refresh failure
           return Promise.reject(err);
         }
       }
-      
+
       return Promise.reject(error);
     }
   );
 
+  // Check authentication status on mount
   useEffect(() => {
     const checkAuth = async () => {
       try {
         const token = localStorage.getItem('accessToken');
         if (token) {
-          // Verify token by making a request
-          const res = await axios.get('/auth/refresh');
-          localStorage.setItem('accessToken', res.data.accessToken);
-          
-          // Get user data
-          const userInfo = JSON.parse(localStorage.getItem('userInfo'));
-          setCurrentUser(userInfo);
+          // Verify token by fetching user data
+          const res = await axios.get('/users/me', { withCredentials: true });
+          localStorage.setItem('userInfo', JSON.stringify(res.data));
+          setCurrentUser(res.data);
         }
       } catch (err) {
+        console.error('Auth check failed:', err.response?.data || err.message);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('userInfo');
+        setCurrentUser(null);
       } finally {
         setLoading(false);
       }
@@ -83,43 +93,59 @@ export const AuthProvider = ({ children }) => {
       await axios.post('/auth/register', { username, email, password });
       return true;
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
-      throw err;
+      const message = err.response?.data?.message || 'Registration failed';
+      setError(message);
+      throw new Error(message);
     }
   };
 
-  const login = async (email, password) => {
+  const login = async (email, password, token = null) => {
     try {
-      const res = await axios.post('/auth/login', { email, password });
-      localStorage.setItem('accessToken', res.data.accessToken);
+      let res;
+      if (token) {
+        // Google Sign-In: Use token-based authentication
+        res = await axios.post('/auth/google', { idToken: token }, { withCredentials: true });
+      } else {
+        // Email/Password login
+        if (!email || !password) {
+          throw new Error('Email and password are required');
+        }
+        res = await axios.post('/auth/login', { email, password }, { withCredentials: true });
+      }
+
+      localStorage.setItem('accessToken', res.data.accessToken || res.data.token);
       localStorage.setItem('userInfo', JSON.stringify(res.data.user));
       setCurrentUser(res.data.user);
+      setError('');
       return res.data;
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
-      throw err;
+      const message = err.response?.data?.message || 'Login failed';
+      setError(message);
+      throw new Error(message);
     }
   };
 
   const logout = async () => {
     try {
-      await axios.post('/auth/logout');
+      await axios.post('/auth/logout', {}, { withCredentials: true });
     } catch (err) {
-      console.error('Logout error:', err);
+      console.error('Logout error:', err.response?.data || err.message);
     } finally {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('userInfo');
       setCurrentUser(null);
+      setError('');
     }
   };
 
   const value = {
     currentUser,
+    setCurrentUser, // Added to make setCurrentUser available
     loading,
     error,
     register,
     login,
-    logout
+    logout,
   };
 
   return (
