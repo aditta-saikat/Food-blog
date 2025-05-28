@@ -1,3 +1,3 @@
-config/*.json
+echo "backend/config/*.json" >> .gitignore
 
 node_modules/
