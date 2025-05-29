@@ -1,6 +1,6 @@
 # 🍽️ Food Blog Application
 
-A full-stack web application for food enthusiasts to share, review, and discover restaurant experiences. Users can create profiles, post reviews with images, rate restaurants, add tags, and manage bookmarks, followers, and notifications. The app features a responsive React frontend and a Node.js/Express backend with MongoDB for data storage.
+A full-stack web application for food enthusiasts to share, review, and discover restaurant experiences. Users can create profiles and update, post reviews with images, rate restaurants, add tags, like and comments to each other reviews. The app features a responsive React frontend and a Node.js/Express backend with MongoDB for data storage.
 
 ---
 
