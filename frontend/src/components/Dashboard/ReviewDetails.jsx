@@ -582,6 +582,7 @@ export const ReviewDetails = () => {
                       src={user.avatarUrl || "/api/placeholder/32/32"}
                       alt={user.username}
                       className="w-8 h-8 rounded-full"
+                      loading="lazy"
                     />
                     <span className="text-gray-700">{user.username}</span>
                   </li>
