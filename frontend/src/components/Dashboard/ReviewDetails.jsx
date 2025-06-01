@@ -53,7 +53,6 @@ export const ReviewDetails = () => {
         setLoading(true);
         const data = await getBlogById(id);
         const newHasLiked = await hasLiked(id);
-        console.log("API Response for Review:", data);
         setReview(data);
         setComments(data.comments || []);
         setLikeCount(data.totalLikes || 0);

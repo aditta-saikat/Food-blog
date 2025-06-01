@@ -15,12 +15,15 @@ const Dashboard = () => {
   const [showComments, setShowComments] = useState({});
   const [newComment, setNewComment] = useState("");
   const [viewMode, setViewMode] = useState("grid");
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [selectedReview, setSelectedReview] = useState(null);
 
   useEffect(() => {
     const fetchReviews = async () => {
       try {
         setLoading(true);
-        const data = await getAllBlogs(filter);
+        const data = await getAllBlogs(filter, currentUser?.id);
+        console.log("Dashboard: getAllBlogs response:", data);
         setReviews(data);
         setLoading(false);
       } catch (err) {
@@ -29,11 +32,34 @@ const Dashboard = () => {
       }
     };
 
-    fetchReviews();
-  }, [filter]);
+    if (currentUser) {
+      fetchReviews();
+    }
+  }, [filter, currentUser]);
 
   const onReviewCreated = (newReview) => {
-    setReviews([newReview, ...reviews]);
+    setReviews((prev) => [newReview, ...prev]);
+  };
+
+  const handleReviewUpdated = (updatedReview) => {
+    setReviews((prev) =>
+      prev.map((review) =>
+        review._id === updatedReview._id ? updatedReview : review
+      )
+    );
+    setIsUpdateModalOpen(false);
+    setSelectedReview(null);
+  };
+
+  const handleEditReview = async (reviewId, blogData) => {
+    console.log("Dashboard: handleEditReview called with:", { reviewId, blogData });
+    if (reviewId && blogData) {
+      setSelectedReview(blogData);
+      setIsUpdateModalOpen(true);
+    } else {
+      setSelectedReview(null);
+      setIsUpdateModalOpen(false);
+    }
   };
 
   const toggleLike = async (reviewId) => {
@@ -42,13 +68,13 @@ const Dashboard = () => {
         reviews.map((review) => {
           if (review._id === reviewId) {
             const userAlreadyLiked = review.likes.some(
-              (like) => like._id === currentUser._id,
+              (like) => like._id === currentUser.id
             );
             if (userAlreadyLiked) {
               return {
                 ...review,
                 likes: review.likes.filter(
-                  (like) => like._id !== currentUser._id,
+                  (like) => like._id !== currentUser.id
                 ),
               };
             } else {
@@ -56,13 +82,13 @@ const Dashboard = () => {
                 ...review,
                 likes: [
                   ...review.likes,
-                  { _id: currentUser._id, username: currentUser.username },
+                  { _id: currentUser.id, username: currentUser.username },
                 ],
               };
             }
           }
           return review;
-        }),
+        })
       );
     } catch (err) {
       console.error("Error toggling like:", err);
@@ -109,7 +135,7 @@ const Dashboard = () => {
             };
           }
           return review;
-        }),
+        })
       );
 
       setNewComment("");
@@ -128,6 +154,14 @@ const Dashboard = () => {
       review.rating.toString().includes(searchLower)
     );
   });
+
+  if (!currentUser) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -159,6 +193,10 @@ const Dashboard = () => {
           setNewComment={setNewComment}
           filter={filter}
           searchTerm={searchTerm}
+          isUpdateModalOpen={isUpdateModalOpen}
+          selectedReview={selectedReview}
+          handleReviewUpdated={handleReviewUpdated}
+          onEditReview={handleEditReview}
         />
       </div>
       <footer className="bg-white">

@@ -49,12 +49,11 @@ exports.getAllBlogs = async (req, res) => {
 
 exports.createBlog = async (req, res) => {
   try {
-
     if (!req.body || !req.body.data) {
       return res.status(400).json({ message: 'Missing data field in request body' });
     }
 
-    const { title, content, restaurant, location, rating, tags } = JSON.parse(req.body.data);
+    const { title, content, restaurant, location, rating, tags, category} = JSON.parse(req.body.data);
     const imageUrls = [];
 
     if (req.files && req.files.images) {
@@ -100,6 +99,7 @@ exports.createBlog = async (req, res) => {
       location: location || '',
       rating: Number(rating),
       tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
+      category: category || '',
       images: imageUrls,
       author: req.user._id
     });
@@ -121,6 +121,7 @@ exports.createBlog = async (req, res) => {
         location: newBlog.location,
         rating: newBlog.rating,
         tags: newBlog.tags,
+        category: newBlog.category,
         images: newBlog.images,
         author: {
           _id: newBlog.author._id,
@@ -182,10 +183,12 @@ exports.updateBlog = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    const { title, content, images, tags, category, rating, isFeatured } = req.body;
+    const { title, content, restaurant, location, images, tags, category, rating, isFeatured } = req.body;
 
     blog.title = title || blog.title;
     blog.content = content || blog.content;
+    blog.restaurant = restaurant || blog.restaurant;
+    blog.location = location || blog.location;
     blog.images = images || blog.images;
     blog.tags = tags || blog.tags;
     blog.category = category || blog.category;
@@ -225,7 +228,7 @@ exports.deleteBlog = async (req, res) => {
     }
 
     await Like.deleteMany({ blogId: blog._id });
-    await blog.remove();
+    await blog.deleteOne();
 
     res.status(200).json({ message: 'Blog deleted successfully' });
   } catch (err) {

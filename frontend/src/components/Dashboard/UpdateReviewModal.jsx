@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { X, Star, Image, Tag } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Star, Image as ImageIcon, Tag } from 'lucide-react';
+import { updateBlog } from '../../lib/api/Blog';
 
-const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
+const UpdateReviewModal = ({ isOpen, onClose, onSubmit, review }) => {
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -10,14 +11,38 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
     rating: 0,
     tags: '',
     category: '',
+    isFeatured: false,
   });
   const [images, setImages] = useState([]);
+  const [imageFiles, setImageFiles] = useState([]);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Initialize formData and images when review changes
+  useEffect(() => {
+    if (review) {
+      setFormData({
+        title: review.title || '',
+        content: review.content || '',
+        restaurant: review.restaurant || '',
+        location: review.location || '',
+        rating: review.rating || 0,
+        tags: Array.isArray(review.tags) ? review.tags.join(', ') : review.tags || '',
+        category: review.category || '',
+        isFeatured: review.isFeatured || false,
+      });
+      setImages(review.images || []);
+      setImageFiles([]);
+      setErrors({});
+    }
+  }, [review]);
+
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
     setErrors({ ...errors, [name]: '' });
   };
 
@@ -30,7 +55,7 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
     const files = Array.from(e.target.files);
     const validFiles = files.filter(file => {
       const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-      const validSize = file.size <= 32 * 1024 * 1024; 
+      const validSize = file.size <= 32 * 1024 * 1024; // 32MB
       if (!validTypes.includes(file.type)) {
         setErrors(prev => ({ ...prev, images: 'Only JPEG, JPG, or PNG images allowed' }));
         return false;
@@ -42,7 +67,8 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
       return true;
     });
 
-    setImages(validFiles);
+    setImageFiles(validFiles);
+    setImages(validFiles.map(file => URL.createObjectURL(file)));
     if (validFiles.length === files.length) {
       setErrors({ ...errors, images: '' });
     }
@@ -66,14 +92,30 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
     }
 
     setSubmitting(true);
+    setErrors({ submit: '' });
     try {
-      await onSubmit(formData, images);
-      setFormData({ title: '', content: '', restaurant: '', location: '', rating: 0, tags: '' , catagory: ''});
+      const updatedBlogData = {
+        ...formData,
+        tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+      };
+      console.log("UpdateReviewModal: Submitting data:", updatedBlogData, imageFiles);
+      const updatedBlog = await updateBlog(review._id, updatedBlogData, imageFiles);
+      await onSubmit(updatedBlog);
+      setFormData({
+        title: '',
+        content: '',
+        restaurant: '',
+        location: '',
+        rating: 0,
+        tags: '',
+        category: '',
+        isFeatured: false,
+      });
       setImages([]);
+      setImageFiles([]);
       onClose();
-      window.location.reload(); 
     } catch (err) {
-      setErrors({ submit: err.message || 'Failed to create review' });
+      setErrors({ submit: err.message || 'Failed to update review' });
     } finally {
       setSubmitting(false);
     }
@@ -85,7 +127,7 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl shadow-sm max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-gray-100">
-          <h2 className="text-lg font-medium text-gray-900">Create New Review</h2>
+          <h2 className="text-lg font-medium text-gray-900">Update Review</h2>
           <button
             onClick={onClose}
             className="p-1 hover:bg-gray-100 rounded-full transition-colors"
@@ -161,7 +203,7 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
             {errors.rating && <p className="mt-1 text-xs text-red-500">{errors.rating}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tags (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tags (Optional, comma-separated)</label>
             <div className="relative">
               <Tag size={16} className="absolute left-3 top-2.5 text-gray-400" />
               <input
@@ -185,6 +227,7 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
               placeholder="Enter category"
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Images (Optional)</label>
             <div className="relative">
@@ -195,15 +238,15 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
                 onChange={handleImageChange}
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:bg-primary-100 file:text-primary-700 file:font-medium"
               />
-              <Image size={16} className="absolute right-3 top-2.5 text-gray-400" />
+              <ImageIcon size={16} className="absolute right-3 top-2.5 text-gray-400" />
             </div>
             {errors.images && <p className="mt-1 text-xs text-red-500">{errors.images}</p>}
             {images.length > 0 && (
               <div className="mt-2 grid grid-cols-3 gap-2">
-                {images.map((image, index) => (
+                {images.map((img, index) => (
                   <img
                     key={index}
-                    src={URL.createObjectURL(image)}
+                    src={img}
                     alt={`Preview ${index + 1}`}
                     className="h-20 w-full object-cover rounded-md"
                   />
@@ -225,7 +268,7 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
               disabled={submitting}
               className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 disabled:opacity-50"
             >
-              {submitting ? 'Creating...' : 'Create Review'}
+              {submitting ? 'Updating...' : 'Update Review'}
             </button>
           </div>
         </form>
@@ -234,4 +277,4 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
   );
 };
 
-export default NewReviewModal;
+export default UpdateReviewModal;

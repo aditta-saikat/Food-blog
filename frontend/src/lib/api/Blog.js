@@ -29,7 +29,8 @@ export const createBlog = async (blogData, images) => {
       restaurant: blogData.restaurant,
       location: blogData.location,
       rating: blogData.rating,
-      tags: blogData.tags
+      tags: blogData.tags,
+      category: blogData.category,
     }));
     
     // Append images

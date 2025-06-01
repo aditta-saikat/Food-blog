@@ -1,31 +1,34 @@
 import { useState } from 'react';
 import ReviewCard from './ReviewCard';
 import NewReviewModal from './NewReviewModal';
+import UpdateReviewModal from './UpdateReviewModal';
 import { User, PlusCircle } from 'lucide-react';
 import { createBlog } from '../../lib/api/Blog';
 
-const ReviewList = ({
+export default function ReviewList({
   reviews,
   loading,
   viewMode,
   currentUser,
   showComments,
-  toggleLike,
   toggleCommentSection,
   handleDeleteReview,
   filter,
-  searchTerm
-}) => {
+  searchTerm,
+  isUpdateModalOpen,
+  selectedReview,
+  handleReviewUpdated,
+  onEditReview,
+}) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [localReviews, setLocalReviews] = useState(reviews);
-
 
   const handleCreateReview = async (formData, images) => {
     try {
       const newBlog = await createBlog(formData, images);
-      setLocalReviews([newBlog, ...localReviews]);
+      setIsModalOpen(false);
+      return newBlog;
     } catch (err) {
-      throw err; // Let NewReviewModal handle the error
+      throw err;
     }
   };
 
@@ -44,9 +47,10 @@ const ReviewList = ({
               viewMode={viewMode}
               currentUser={currentUser}
               showComments={showComments}
-              toggleLike={toggleLike}
               toggleCommentSection={toggleCommentSection}
               handleDeleteReview={handleDeleteReview}
+              onEditReview={onEditReview}
+              filter={filter}
             />
           ))}
         </div>
@@ -77,8 +81,12 @@ const ReviewList = ({
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleCreateReview}
       />
+      <UpdateReviewModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => onEditReview(null)}
+        onSubmit={handleReviewUpdated}
+        review={selectedReview}
+      />
     </>
   );
 };
-
-export default ReviewList;

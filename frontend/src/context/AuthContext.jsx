@@ -36,8 +36,8 @@ export const AuthProvider = ({ children }) => {
     async (error) => {
       const originalRequest = error.config;
 
-      // If error is 403 or 401 and not already retrying
-      if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
+      // If error is 401 and not already retrying
+      if (error.response?.status === 401 && !originalRequest._retry) {
         originalRequest._retry = true;
 
         try {
@@ -55,7 +55,10 @@ export const AuthProvider = ({ children }) => {
           return axios(originalRequest);
         } catch (err) {
           console.error('Token refresh failed:', err);
-          logout(); // Clear session on refresh failure
+          // Only logout if refresh token is invalid
+          if (err.response?.status === 401 || err.response?.data?.message === 'Invalid refresh token') {
+            logout();
+          }
           return Promise.reject(err);
         }
       }
@@ -69,17 +72,27 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       try {
         const token = localStorage.getItem('accessToken');
+        const userInfo = localStorage.getItem('userInfo');
+
+        // If token and userInfo exist, set currentUser from localStorage first
+        if (token && userInfo) {
+          setCurrentUser(JSON.parse(userInfo));
+        }
+
+        // Verify token by fetching user data
         if (token) {
-          // Verify token by fetching user data
           const res = await axios.get('/users/me', { withCredentials: true });
           localStorage.setItem('userInfo', JSON.stringify(res.data));
           setCurrentUser(res.data);
         }
       } catch (err) {
         console.error('Auth check failed:', err.response?.data || err.message);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('userInfo');
-        setCurrentUser(null);
+        // Only clear session if token is explicitly invalid
+        if (err.response?.status === 401 && err.response?.data?.message === 'Invalid token') {
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('userInfo');
+          setCurrentUser(null);
+        }
       } finally {
         setLoading(false);
       }
@@ -140,7 +153,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     currentUser,
-    setCurrentUser, // Added to make setCurrentUser available
+    setCurrentUser,
     loading,
     error,
     register,
@@ -154,3 +167,5 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
+
+export default AuthProvider;
