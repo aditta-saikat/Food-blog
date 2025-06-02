@@ -32,17 +32,6 @@ const ReviewCard = ({
   const [loadingComments, setLoadingComments] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  useEffect(() => {
-    console.log("ReviewCard Debug:", {
-      currentUser: currentUser,
-      reviewAuthor: review.author,
-      reviewId: review._id,
-      isCurrentUserAuthor: currentUser && review.author && (
-        (typeof review.author === 'string' && review.author === currentUser.id) ||
-        (review.author && review.author._id && review.author._id === currentUser.id)
-      )
-    });
-  }, [currentUser, review]);
 
   useEffect(() => {
     if (showComments[review._id]) {
@@ -79,7 +68,7 @@ const ReviewCard = ({
     e.stopPropagation();
     try {
       const blogData = await getBlogById(review._id);
-      console.log("ReviewCard: getBlogById response:", blogData);
+     
       onEditReview(review._id, blogData);
     } catch (err) {
       console.error("Error fetching review:", err);

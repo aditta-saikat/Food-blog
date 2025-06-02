@@ -74,21 +74,60 @@ export const getBlogById = async (id) => {
 };
 
 // Update a blog
-export const updateBlog = async (id, blogData) => {
+export const updateBlog = async (id, blogData, images) => {
   try {
+    // Validate inputs
+    if (!blogData.title || !blogData.content || !blogData.restaurant || !blogData.rating) {
+      throw new Error('Required fields: title, content, restaurant, rating');
+    }
+
+    // Validate and format tags
+    let tags = blogData.tags;
+    if (Array.isArray(tags)) {
+      tags = tags.map(tag => String(tag).trim()).filter(tag => tag).join(',');
+    } else if (tags && typeof tags !== 'string') {
+      throw new Error('Tags must be a string or array');
+    }
+
+    // Validate images
+    images.forEach((image) => {
+      if (!(image instanceof File)) throw new Error('Invalid image file');
+      if (image.size > 32 * 1024 * 1024) throw new Error('Image exceeds 32MB');
+    });
+
+    const formData = new FormData();
+    formData.append(
+      'data',
+      JSON.stringify({
+        title: blogData.title,
+        content: blogData.content,
+        restaurant: blogData.restaurant,
+        location: blogData.location || '',
+        rating: blogData.rating,
+        tags,
+        category: blogData.category || '',
+        images: blogData.images || [], // Existing URLs
+        isFeatured: !!blogData.isFeatured,
+      }),
+    );
+
+    images.forEach((image) => {
+      formData.append('images', image);
+    });
+
     const response = await axios.put(
       `${import.meta.env.VITE_API_URL}/blogs/${id}`,
-      blogData,
-      { withCredentials: true }
+      formData,
+      { withCredentials: true },
     );
+
     return response.data.blog;
   } catch (err) {
     const errorMessage = err.response?.data?.message || 'Failed to update blog';
-    console.error('Error updating blog:', errorMessage);
+    console.error('Error updating blog:', errorMessage, err.response?.data);
     throw new Error(errorMessage);
   }
 };
-
 // Delete a blog
 export const deleteBlog = async (id) => {
   try {

@@ -23,7 +23,7 @@ const Dashboard = () => {
       try {
         setLoading(true);
         const data = await getAllBlogs(filter, currentUser?.id);
-        console.log("Dashboard: getAllBlogs response:", data);
+        
         setReviews(data);
         setLoading(false);
       } catch (err) {
@@ -52,7 +52,7 @@ const Dashboard = () => {
   };
 
   const handleEditReview = async (reviewId, blogData) => {
-    console.log("Dashboard: handleEditReview called with:", { reviewId, blogData });
+   
     if (reviewId && blogData) {
       setSelectedReview(blogData);
       setIsUpdateModalOpen(true);
