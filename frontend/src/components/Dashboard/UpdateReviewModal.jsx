@@ -13,14 +13,15 @@ const UpdateReviewModal = ({ isOpen, onClose, onSubmit, review }) => {
     category: '',
     isFeatured: false,
   });
-  const [images, setImages] = useState([]);
-  const [imageFiles, setImageFiles] = useState([]);
+  const [images, setImages] = useState([]); // Existing image URLs
+  const [imageFiles, setImageFiles] = useState([]); // New uploaded files
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
 
   // Initialize formData and images when review changes
   useEffect(() => {
     if (review) {
+      console.log("UpdateReviewModal: Received review:", review);
       setFormData({
         title: review.title || '',
         content: review.content || '',
@@ -67,11 +68,26 @@ const UpdateReviewModal = ({ isOpen, onClose, onSubmit, review }) => {
       return true;
     });
 
-    setImageFiles(validFiles);
-    setImages(validFiles.map(file => URL.createObjectURL(file)));
+    setImageFiles(prev => [...prev, ...validFiles]);
+    setImages(prev => [...prev, ...validFiles.map(file => URL.createObjectURL(file))]);
     if (validFiles.length === files.length) {
       setErrors({ ...errors, images: '' });
     }
+  };
+
+  const handleRemoveImage = (index) => {
+    setImages(prev => {
+      const removedImage = prev[index];
+      const newImages = prev.filter((_, i) => i !== index);
+      // If the removed image is a new file (Object URL), remove from imageFiles
+      if (removedImage.startsWith('blob:')) {
+        setImageFiles(prevFiles => prevFiles.filter((_, i) => 
+          prevFiles.map(file => URL.createObjectURL(file)).indexOf(removedImage) !== i
+        ));
+        URL.revokeObjectURL(removedImage); // Clean up Object URL
+      }
+      return newImages;
+    });
   };
 
   const validateForm = () => {
@@ -97,6 +113,7 @@ const UpdateReviewModal = ({ isOpen, onClose, onSubmit, review }) => {
       const updatedBlogData = {
         ...formData,
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+        images: images.filter(img => !img.startsWith('blob:')), // Only send existing URLs
       };
       console.log("UpdateReviewModal: Submitting data:", updatedBlogData, imageFiles);
       const updatedBlog = await updateBlog(review._id, updatedBlogData, imageFiles);
@@ -227,7 +244,6 @@ const UpdateReviewModal = ({ isOpen, onClose, onSubmit, review }) => {
               placeholder="Enter category"
             />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Images (Optional)</label>
             <div className="relative">
@@ -244,12 +260,20 @@ const UpdateReviewModal = ({ isOpen, onClose, onSubmit, review }) => {
             {images.length > 0 && (
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {images.map((img, index) => (
-                  <img
-                    key={index}
-                    src={img}
-                    alt={`Preview ${index + 1}`}
-                    className="h-20 w-full object-cover rounded-md"
-                  />
+                  <div key={index} className="relative">
+                    <img
+                      src={img}
+                      alt={`Preview ${index + 1}`}
+                      className="h-20 w-full object-cover rounded-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

@@ -30,7 +30,7 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
     const files = Array.from(e.target.files);
     const validFiles = files.filter(file => {
       const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-      const validSize = file.size <= 32 * 1024 * 1024; 
+      const validSize = file.size <= 32 * 1024 * 1024; // 32MB
       if (!validTypes.includes(file.type)) {
         setErrors(prev => ({ ...prev, images: 'Only JPEG, JPG, or PNG images allowed' }));
         return false;
@@ -42,10 +42,17 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
       return true;
     });
 
-    setImages(validFiles);
+    setImages(prev => [...prev, ...validFiles]);
     if (validFiles.length === files.length) {
       setErrors({ ...errors, images: '' });
     }
+  };
+
+  const handleRemoveImage = (index) => {
+    setImages(prev => {
+      const newImages = prev.filter((_, i) => i !== index);
+      return newImages;
+    });
   };
 
   const validateForm = () => {
@@ -67,11 +74,22 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
 
     setSubmitting(true);
     try {
-      await onSubmit(formData, images);
-      setFormData({ title: '', content: '', restaurant: '', location: '', rating: 0, tags: '' , catagory: ''});
+      const submittedData = {
+        ...formData,
+        tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+      };
+      await onSubmit(submittedData, images);
+      setFormData({
+        title: '',
+        content: '',
+        restaurant: '',
+        location: '',
+        rating: 0,
+        tags: '',
+        category: '', // Fixed typo: was 'catagory'
+      });
       setImages([]);
       onClose();
-      window.location.reload(); 
     } catch (err) {
       setErrors({ submit: err.message || 'Failed to create review' });
     } finally {
@@ -201,12 +219,20 @@ const NewReviewModal = ({ isOpen, onClose, onSubmit }) => {
             {images.length > 0 && (
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {images.map((image, index) => (
-                  <img
-                    key={index}
-                    src={URL.createObjectURL(image)}
-                    alt={`Preview ${index + 1}`}
-                    className="h-20 w-full object-cover rounded-md"
-                  />
+                  <div key={index} className="relative">
+                    <img
+                      src={URL.createObjectURL(image)}
+                      alt={`Preview ${index + 1}`}
+                      className="h-20 w-full object-cover rounded-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
