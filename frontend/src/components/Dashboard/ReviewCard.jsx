@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Heart,
   MessageCircle,
@@ -10,45 +10,46 @@ import {
   Image,
   Calendar,
   MapPin,
-} from "lucide-react";
-import { getCommentsByBlog } from "../../lib/api/Comment";
-import { toggleLike, getLikesCount, hasLiked } from "../../lib/api/Like";
-import { getBlogById, deleteBlog } from "../../lib/api/Blog";
+} from 'lucide-react';
+import { getCommentsByBlog } from '../../lib/api/Comment';
+import { toggleLike, getLikesCount, hasLiked } from '../../lib/api/Like';
+import { getBlogById, deleteBlog } from '../../lib/api/Blog';
 
 const ReviewCard = ({
   review,
   viewMode,
   currentUser,
-  showComments,
   toggleCommentSection,
   handleDeleteReview,
   onEditReview,
-  filter,
 }) => {
   const navigate = useNavigate();
   const [comments, setComments] = useState([]);
   const [likeCount, setLikeCount] = useState(review.totalLikes || 0);
   const [hasUserLiked, setHasUserLiked] = useState(review.hasLiked || false);
-  const [loadingComments, setLoadingComments] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
+  // Initialize with 0 and let the API call set the correct value
+  const [commentCount, setCommentCount] = useState(0); 
 
   useEffect(() => {
-    if (showComments[review._id]) {
-      const fetchComments = async () => {
-        setLoadingComments(true);
-        try {
-          const data = await getCommentsByBlog(review._id);
-          setComments(data);
-        } catch (err) {
-          console.error("Error fetching comments:", err);
-        } finally {
-          setLoadingComments(false);
-        }
-      };
-      fetchComments();
+    const fetchCommentCount = async () => {
+      try {
+        const data = await getCommentsByBlog(review._id);
+        // Set the comment count to the actual length from API
+        setCommentCount(data.length); 
+        setComments(data); 
+      } catch (err) {
+        console.error('Error fetching comments:', err);
+        // Reset to 0 on error to avoid showing incorrect counts
+        setCommentCount(0);
+      }
+    };
+
+    // Only fetch if review._id exists
+    if (review._id) {
+      fetchCommentCount();
     }
-  }, [showComments, review._id]);
+  }, [review._id]);
 
   const handleToggleLike = async () => {
     if (!currentUser) return;
@@ -59,7 +60,7 @@ const ReviewCard = ({
       setHasUserLiked(newHasLiked);
       setLikeCount(newLikeCount);
     } catch (err) {
-      console.error("Error toggling like:", err);
+      console.error('Error toggling like:', err);
     }
   };
 
@@ -68,11 +69,10 @@ const ReviewCard = ({
     e.stopPropagation();
     try {
       const blogData = await getBlogById(review._id);
-     
       onEditReview(review._id, blogData);
     } catch (err) {
-      console.error("Error fetching review:", err);
-      alert("Failed to load review data. Please try again.");
+      console.error('Error fetching review:', err);
+      alert('Failed to load review data. Please try again.');
     }
   };
 
@@ -88,8 +88,8 @@ const ReviewCard = ({
       handleDeleteReview(review._id);
       setShowDeleteConfirm(false);
     } catch (err) {
-      console.error("Error deleting review:", err);
-      alert("Failed to delete review. Please try again.");
+      console.error('Error deleting review:', err);
+      alert('Failed to delete review. Please try again.');
     }
   };
 
@@ -99,18 +99,11 @@ const ReviewCard = ({
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',  
+      day: 'numeric',
     });
-  };
-
-  const navigateToDetails = (e) => {
-    if (e.target.closest("button") || e.target.closest("a")) {
-      return;
-    }
-    navigate(`/reviews/${review._id}`);
   };
 
   const StarRating = ({ rating }) => {
@@ -122,8 +115,8 @@ const ReviewCard = ({
             size={16}
             className={
               i < Math.floor(rating)
-                ? "text-yellow-400 fill-yellow-400"
-                : "text-gray-300"
+                ? 'text-yellow-400 fill-yellow-400'
+                : 'text-gray-300'
             }
           />
         ))}
@@ -134,23 +127,29 @@ const ReviewCard = ({
     );
   };
 
-  const isCurrentUserAuthor = currentUser && review.author && (
-    (typeof review.author === 'string' && review.author === currentUser.id) ||
-    (review.author && review.author._id && review.author._id === currentUser.id)
-  );
+  const isCurrentUserAuthor =
+    currentUser &&
+    review.author &&
+    ((typeof review.author === 'string' && review.author === currentUser.id) ||
+      (review.author && review.author._id && review.author._id === currentUser.id));
 
   return (
     <>
       <div
         className={`bg-white rounded-xl shadow-sm overflow-hidden transition-all hover:shadow-md cursor-pointer ${
-          viewMode === "list" ? "flex flex-col md:flex-row" : ""
+          viewMode === 'list' ? 'flex flex-col md:flex-row' : ''
         }`}
-        onClick={navigateToDetails}
+        onClick={(e) => {
+          if (e.target.closest('button') || e.target.closest('a') || e.target.closest('input')) {
+            return;
+          }
+          navigate(`/reviews/${review._id}`);
+        }}
       >
-        <div className={viewMode === "list" ? "md:w-1/3" : ""}>
+        <div className={viewMode === 'list' ? 'md:w-1/3' : ''}>
           <div className="relative aspect-video">
             <img
-              src={review.images[0] || "/api/placeholder/400/320"}
+              src={review.images[0] || '/api/placeholder/400/320'}
               alt={review.title}
               className="h-full w-full object-cover"
               loading="lazy"
@@ -169,18 +168,12 @@ const ReviewCard = ({
             )}
           </div>
         </div>
-        <div
-          className={`p-4 flex flex-col ${viewMode === "list" ? "md:w-2/3" : ""}`}
-        >
+        <div className={`p-4 flex flex-col ${viewMode === 'list' ? 'md:w-2/3' : ''}`}>
           <div className="flex items-start justify-between mb-2">
             <div>
-              <h3 className="font-bold text-lg text-gray-900 mb-1">
-                {review.title}
-              </h3>
+              <h3 className="font-bold text-lg text-gray-900 mb-1">{review.title}</h3>
               <div className="flex items-center text-sm text-gray-500 mb-1">
-                <span className="font-medium text-gray-700">
-                  {review.restaurant}
-                </span>
+                <span className="font-medium text-gray-700">{review.restaurant}</span>
                 {review.location && (
                   <>
                     <span className="mx-1">•</span>
@@ -194,15 +187,13 @@ const ReviewCard = ({
               <StarRating rating={review.rating} />
             </div>
           </div>
-          <p className="text-gray-600 text-sm mb-4 line-clamp-3">
-            {review.content}
-          </p>
+          <p className="text-gray-600 text-sm mb-4 line-clamp-3">{review.content}</p>
           {review.tags && review.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-4">
               {review.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="bg-primary-500 text-white font-semibold text-xs px-2 py-1 rounded-full"
+                  className="bg-primary-400 text-white font-semibold text-xs px-2 py-1 rounded-full"
                 >
                   {tag}
                 </span>
@@ -213,7 +204,7 @@ const ReviewCard = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <img
-                  src={review.author.avatarUrl || "/api/placeholder/32/32"}
+                  src={review.author.avatarUrl || '/api/placeholder/32/32'}
                   alt={review.author.username}
                   className="w-6 h-6 rounded-full mr-2"
                 />
@@ -226,10 +217,7 @@ const ReviewCard = ({
                   {formatDate(review.createdAt)}
                 </span>
               </div>
-              <div
-                className="flex items-center space-x-1"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={handleToggleLike}
                   disabled={!currentUser}
@@ -237,9 +225,7 @@ const ReviewCard = ({
                 >
                   <Heart
                     size={16}
-                    className={
-                      hasUserLiked ? "fill-red-500 text-red-500" : "text-gray-400"
-                    }
+                    className={hasUserLiked ? 'fill-red-500 text-red-500' : 'text-gray-400'}
                   />
                   <span className="text-xs text-gray-500">{likeCount}</span>
                 </button>
@@ -252,9 +238,7 @@ const ReviewCard = ({
                   className="p-1.5 hover:bg-gray-100 rounded-full transition-colors flex items-center space-x-1"
                 >
                   <MessageCircle size={16} className="text-gray-400" />
-                  <span className="text-xs text-gray-500">
-                    {review.comments.length}
-                  </span>
+                  <span className="text-xs text-gray-500">{commentCount}</span>
                 </button>
                 <button
                   className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
@@ -296,7 +280,7 @@ const ReviewCard = ({
             <div className="flex justify-end space-x-2">
               <button
                 onClick={cancelDelete}
-                className="px-4 inescapable-2 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
               >
                 Cancel
               </button>

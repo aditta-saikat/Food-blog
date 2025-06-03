@@ -22,8 +22,6 @@ import {
 } from "../../lib/api/Comment";
 import {
   toggleLike,
-  getLikesCount,
-  hasLiked,
   getUsersWhoLiked,
 } from "../../lib/api/Like";
 import { useAuth } from "../../context/AuthContext";
@@ -42,24 +40,26 @@ export const ReviewDetails = () => {
   const [showFullContent, setShowFullContent] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [hasUserLiked, setHasUserLiked] = useState(false);
+  const [loadingLike, setLoadingLike] = useState(false);
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [usersWhoLiked, setUsersWhoLiked] = useState([]);
   const [editCommentId, setEditCommentId] = useState(null);
   const [editContent, setEditContent] = useState("");
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchReviewDetails = async () => {
       try {
         setLoading(true);
         const data = await getBlogById(id);
-        const newHasLiked = await hasLiked(id);
         setReview(data);
         setComments(data.comments || []);
         setLikeCount(data.totalLikes || 0);
-        setHasUserLiked(newHasLiked || false);
+        setHasUserLiked(data.liked || false);
         setLoading(false);
       } catch (err) {
         console.error("Error fetching review details:", err);
+        setError("Failed to load review. Please try again.");
         setLoading(false);
       }
     };
@@ -82,25 +82,36 @@ export const ReviewDetails = () => {
   };
 
   const handleAddComment = async () => {
+    if (!currentUser) {
+      setError("Please log in to comment.");
+      return;
+    }
     if (!newComment.trim()) return;
     try {
       const comment = await createComment(review._id, newComment);
-      setComments([...comments, comment]);
+      setComments((prev) => [comment, ...prev]);
       setNewComment("");
-      window.location.reload();
+      setError(null);
     } catch (err) {
       console.error("Error adding comment:", err);
+      setError(err.message || "Failed to post comment. Please try again.");
     }
   };
 
   const handleDeleteComment = async (commentId) => {
+    if (!currentUser) {
+      setError("Please log in to delete comments.");
+      return;
+    }
     const userConfirmed = window.confirm("Do you want to delete this comment?");
-    if (!userConfirmed) return; // Stop if user cancel
+    if (!userConfirmed) return;
     try {
       await deleteComment(commentId);
       setComments(comments.filter((comment) => comment._id !== commentId));
+      setError(null);
     } catch (err) {
       console.error("Error deleting comment:", err);
+      setError("Failed to delete comment. Please try again.");
     }
   };
 
@@ -110,6 +121,10 @@ export const ReviewDetails = () => {
   };
 
   const handleEditCommentSave = async (commentId) => {
+    if (!currentUser) {
+      setError("Please log in to edit comments.");
+      return;
+    }
     if (!editContent.trim()) return;
     try {
       const updatedComment = await updateComment(commentId, editContent);
@@ -120,9 +135,10 @@ export const ReviewDetails = () => {
       );
       setEditCommentId(null);
       setEditContent("");
-      window.location.reload();
+      setError(null);
     } catch (err) {
       console.error("Error updating comment:", err);
+      setError("Failed to update comment. Please try again.");
     }
   };
 
@@ -132,16 +148,22 @@ export const ReviewDetails = () => {
   };
 
   const handleToggleLike = async () => {
-    if (!review || !currentUser) return;
-
+    if (!currentUser) {
+      setError("Please log in to like this review.");
+      return;
+    }
+    if (!review || loadingLike) return;
+    setLoadingLike(true);
     try {
-      await toggleLike(review._id);
-      const newHasLiked = await hasLiked(review._id);
-      const newLikeCount = await getLikesCount(review._id);
-      setHasUserLiked(newHasLiked);
-      setLikeCount(newLikeCount);
+      const { totalLikes, liked } = await toggleLike(review._id);
+      setHasUserLiked(liked);
+      setLikeCount(totalLikes);
+      setError(null);
     } catch (err) {
       console.error("Error toggling like:", err);
+      setError(err.message || "Failed to toggle like. Please try again.");
+    } finally {
+      setLoadingLike(false);
     }
   };
 
@@ -151,8 +173,10 @@ export const ReviewDetails = () => {
       const users = await getUsersWhoLiked(review._id);
       setUsersWhoLiked(users);
       setShowLikesModal(true);
+      setError(null);
     } catch (err) {
       console.error("Error fetching users who liked:", err);
+      setError("Failed to fetch users who liked. Please try again.");
     }
   };
 
@@ -165,15 +189,11 @@ export const ReviewDetails = () => {
     });
   };
 
-  // Helper function to check if the current user is the comment author
   const isCommentOwner = (comment) => {
     if (!currentUser || !comment || !comment.userId) return false;
-
-    // Check all possible ID formats to ensure compatibility
     const commentUserId =
       comment.userId._id || comment.userId.id || comment.userId;
     const currentUserId = currentUser._id || currentUser.id;
-
     return commentUserId === currentUserId;
   };
 
@@ -228,7 +248,13 @@ export const ReviewDetails = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-
+      {error && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <button
           onClick={() => navigate(-1)}
@@ -239,7 +265,6 @@ export const ReviewDetails = () => {
         </button>
 
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          {/* Image Carousel */}
           <div className="relative bg-gray-900 h-96">
             {review.images && review.images.length > 0 ? (
               <>
@@ -251,7 +276,6 @@ export const ReviewDetails = () => {
                   alt={`${review.title} image ${currentImageIndex + 1}`}
                   className="h-full w-full object-contain"
                 />
-
                 {review.images.length > 1 && (
                   <>
                     <button
@@ -266,7 +290,6 @@ export const ReviewDetails = () => {
                     >
                       <ChevronRight size={24} />
                     </button>
-
                     <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
                       {review.images.map((_, index) => (
                         <button
@@ -290,7 +313,6 @@ export const ReviewDetails = () => {
             )}
           </div>
 
-          {/* Review Details */}
           <div className="p-6">
             <div className="mb-4 flex items-start justify-between">
               <div>
@@ -318,7 +340,6 @@ export const ReviewDetails = () => {
                 </div>
                 <StarRating rating={review.rating} />
               </div>
-
               <div className="flex space-x-2">
                 {review.author._id === currentUser?._id && (
                   <>
@@ -333,7 +354,6 @@ export const ReviewDetails = () => {
               </div>
             </div>
 
-            {/* Author Info */}
             <div className="flex items-center mb-6">
               <img
                 src={review.author.avatarUrl || "/api/placeholder/40/40"}
@@ -351,7 +371,6 @@ export const ReviewDetails = () => {
               </div>
             </div>
 
-            {/* Content */}
             <div className="prose max-w-none mb-6">
               <div
                 className={`transition-all duration-300 ease-in-out ${
@@ -360,14 +379,14 @@ export const ReviewDetails = () => {
                     : "max-h-36 overflow-hidden"
                 }`}
               >
-                <p id="review-content" className="text-gray-700">
+                <p id="review-content" className="text-gray-600">
                   {review.content}
                 </p>
               </div>
               {review.content.length > 200 && (
                 <button
                   onClick={() => setShowFullContent(!showFullContent)}
-                  className="text-primary-600 hover:text-primary-700 font-medium mt-2"
+                  className="text-blue-600 hover:text-blue-700 font-medium mt-2"
                   aria-expanded={showFullContent}
                   aria-controls="review-content"
                 >
@@ -376,13 +395,12 @@ export const ReviewDetails = () => {
               )}
             </div>
 
-            {/* Tags */}
             {review.tags && review.tags.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-6">
                 {review.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="bg-primary-500 text-white font-semibold text-sm px-3 py-1 rounded-full"
+                    className="bg-blue-400 text-white font-semibold text-sm px-3 py-1 rounded-full"
                   >
                     {tag}
                   </span>
@@ -390,13 +408,12 @@ export const ReviewDetails = () => {
               </div>
             )}
 
-            {/* Actions Bar */}
             <div className="flex items-center justify-between py-4 border-t border-b border-gray-200 mb-6">
               <div className="flex items-center space-x-6">
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={handleToggleLike}
-                    disabled={!currentUser}
+                    disabled={!currentUser || loadingLike}
                     className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 disabled:opacity-50"
                   >
                     <Heart
@@ -432,13 +449,10 @@ export const ReviewDetails = () => {
               </div>
             </div>
 
-            {/* Comments Section */}
             <div>
               <h3 className="font-bold text-xl text-gray-800 mb-4">
                 Comments ({comments.length})
               </h3>
-
-              {/* New Comment Form */}
               <div className="flex space-x-3 mb-6">
                 <img
                   src={currentUser?.avatarUrl || "/api/placeholder/40/40"}
@@ -451,19 +465,19 @@ export const ReviewDetails = () => {
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Add a comment..."
-                    className="flex-1 bg-gray-50 border border-gray-200 rounded-l-lg px-4 py-2 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    className="flex-1 bg-gray-50 border border-gray-200 rounded-l-lg px-4 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    disabled={!currentUser}
                   />
                   <button
                     onClick={handleAddComment}
-                    disabled={!newComment.trim() || !currentUser}
-                    className="bg-primary-600 text-white rounded-r-lg px-4 py-2 font-medium disabled:opacity-50 hover:bg-primary-700"
+                    disabled={!currentUser || !newComment.trim()}
+                    className="bg-blue-600 text-white rounded-r-lg px-4 py-2 font-medium disabled:opacity-50 hover:bg-blue-700"
                   >
                     Post
                   </button>
                 </div>
               </div>
 
-              {/* Comments List */}
               {comments.length > 0 ? (
                 <div className="space-y-6">
                   {comments.map((comment) => (
@@ -487,18 +501,17 @@ export const ReviewDetails = () => {
                               </span>
                             </div>
                           </div>
-
                           {editCommentId === comment._id ? (
                             <div className="flex flex-col space-y-2">
                               <textarea
                                 value={editContent}
                                 onChange={(e) => setEditContent(e.target.value)}
-                                className="bg-white border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[80px] resize-none"
+                                className="bg-white border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[80px] resize-none"
                               />
                               <div className="flex justify-end space-x-2">
                                 <button
                                   onClick={handleEditCommentCancel}
-                                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200"
                                 >
                                   Cancel
                                 </button>
@@ -507,7 +520,7 @@ export const ReviewDetails = () => {
                                     handleEditCommentSave(comment._id)
                                   }
                                   disabled={!editContent.trim()}
-                                  className="px-4 py-2 bg-primary-600 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary-700 transition-colors"
+                                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-blue-700"
                                 >
                                   Save Changes
                                 </button>
@@ -515,17 +528,16 @@ export const ReviewDetails = () => {
                             </div>
                           ) : (
                             <>
-                              <p className="text-gray-700 mb-3">
+                              <p className="text-gray-600 mb-3">
                                 {comment.content}
                               </p>
-
                               {isCommentOwner(comment) && (
                                 <div className="flex justify-end space-x-3 mt-2 border-t border-gray-200 pt-2">
                                   <button
                                     onClick={() =>
                                       handleEditCommentStart(comment)
                                     }
-                                    className="text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors"
+                                    className="text-blue-600 hover:text-blue-800 font-medium text-sm"
                                   >
                                     Edit
                                   </button>
@@ -533,7 +545,7 @@ export const ReviewDetails = () => {
                                     onClick={() =>
                                       handleDeleteComment(comment._id)
                                     }
-                                    className="text-red-600 hover:text-red-800 font-medium text-sm transition-colors"
+                                    className="text-red-600 hover:text-red-800 font-medium text-sm"
                                   >
                                     Delete
                                   </button>
@@ -558,7 +570,6 @@ export const ReviewDetails = () => {
         </div>
       </div>
 
-      {/* Likes Modal */}
       {showLikesModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -583,7 +594,7 @@ export const ReviewDetails = () => {
                       className="w-8 h-8 rounded-full"
                       loading="lazy"
                     />
-                    <span className="text-gray-700">{user.username}</span>
+                    <span className="text-gray-600">{user.username}</span>
                   </li>
                 ))}
               </ul>
