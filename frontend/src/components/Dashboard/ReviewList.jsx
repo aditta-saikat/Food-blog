@@ -19,15 +19,17 @@ export default function ReviewList({
   selectedReview,
   handleReviewUpdated,
   onEditReview,
+  toggleBookmark,
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleCreateReview = async (formData, images) => {
     try {
-      const newBlog = await createBlog(formData, images);
+      const newBlog = await createBlog(formData, images, currentUser?.token);
       setIsModalOpen(false);
       return newBlog;
     } catch (err) {
+      console.error("Error creating review:", err);
       throw err;
     }
   };
@@ -51,6 +53,7 @@ export default function ReviewList({
               handleDeleteReview={handleDeleteReview}
               onEditReview={onEditReview}
               filter={filter}
+              toggleBookmark={toggleBookmark}
             />
           ))}
         </div>
@@ -61,11 +64,13 @@ export default function ReviewList({
           </div>
           <h3 className="mt-4 text-lg font-medium text-gray-900">No reviews found</h3>
           <p className="mt-2 text-gray-500">
-            {filter === 'my'
+            {filter === 'bookmarks'
+              ? "You haven't bookmarked any reviews yet."
+              : filter === 'my'
               ? "You haven't created any reviews yet."
               : searchTerm
-                ? `No reviews matching "${searchTerm}"`
-                : "No reviews available at the moment."}
+              ? `No reviews matching "${searchTerm}"`
+              : "No reviews available at the moment."}
           </p>
           <button
             onClick={() => setIsModalOpen(true)}
@@ -89,4 +94,4 @@ export default function ReviewList({
       />
     </>
   );
-};
+}

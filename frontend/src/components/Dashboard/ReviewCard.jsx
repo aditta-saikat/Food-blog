@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Heart,
   MessageCircle,
-  Share2,
+  Bookmark,
   Edit,
   Trash2,
   Star,
@@ -14,38 +14,52 @@ import {
 import { getCommentsByBlog } from '../../lib/api/Comment';
 import { toggleLike, getLikesCount, hasLiked } from '../../lib/api/Like';
 import { getBlogById, deleteBlog } from '../../lib/api/Blog';
+import { useAuth } from '../../context/AuthContext';
 
 const ReviewCard = ({
   review,
   viewMode,
   currentUser,
+  showComments,
   toggleCommentSection,
   handleDeleteReview,
   onEditReview,
+  filter,
+  toggleBookmark,
+  onBookmarkChange, // New prop to handle bookmark state changes
 }) => {
   const navigate = useNavigate();
+  const { currentUser: authUser } = useAuth();
   const [comments, setComments] = useState([]);
   const [likeCount, setLikeCount] = useState(review.totalLikes || 0);
-  const [hasUserLiked, setHasUserLiked] = useState(review.hasLiked || false);
+  const [hasUserLiked, setHasUserLiked] = useState(review.liked || false);
+  const [isBookmarked, setIsBookmarked] = useState(false); 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  // Initialize with 0 and let the API call set the correct value
-  const [commentCount, setCommentCount] = useState(0); 
+  const [commentCount, setCommentCount] = useState(0);
+
+
+  useEffect(() => {
+    setIsBookmarked(review.isBookmarked || false);
+  }, [review.isBookmarked, review._id]); 
+
+
+  useEffect(() => {
+    setLikeCount(review.totalLikes || 0);
+    setHasUserLiked(review.liked || false);
+  }, [review.totalLikes, review.liked, review._id]);
 
   useEffect(() => {
     const fetchCommentCount = async () => {
       try {
         const data = await getCommentsByBlog(review._id);
-        // Set the comment count to the actual length from API
-        setCommentCount(data.length); 
-        setComments(data); 
+        setCommentCount(data.length);
+        setComments(data);
       } catch (err) {
         console.error('Error fetching comments:', err);
-        // Reset to 0 on error to avoid showing incorrect counts
         setCommentCount(0);
       }
     };
 
-    // Only fetch if review._id exists
     if (review._id) {
       fetchCommentCount();
     }
@@ -54,9 +68,9 @@ const ReviewCard = ({
   const handleToggleLike = async () => {
     if (!currentUser) return;
     try {
-      await toggleLike(review._id);
-      const newHasLiked = await hasLiked(review._id);
-      const newLikeCount = await getLikesCount(review._id);
+      await toggleLike(review._id, authUser.token);
+      const newHasLiked = await hasLiked(review._id, authUser.token);
+      const newLikeCount = await getLikesCount(review._id, authUser.token);
       setHasUserLiked(newHasLiked);
       setLikeCount(newLikeCount);
     } catch (err) {
@@ -68,7 +82,7 @@ const ReviewCard = ({
     e.preventDefault();
     e.stopPropagation();
     try {
-      const blogData = await getBlogById(review._id);
+      const blogData = await getBlogById(review._id, authUser.token);
       onEditReview(review._id, blogData);
     } catch (err) {
       console.error('Error fetching review:', err);
@@ -84,7 +98,7 @@ const ReviewCard = ({
 
   const confirmDelete = async () => {
     try {
-      await deleteBlog(review._id);
+      await deleteBlog(review._id, authUser.token);
       handleDeleteReview(review._id);
       setShowDeleteConfirm(false);
     } catch (err) {
@@ -97,11 +111,46 @@ const ReviewCard = ({
     setShowDeleteConfirm(false);
   };
 
+  const handleToggleBookmark = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!currentUser) {
+      alert('Please log in to bookmark reviews.');
+      return;
+    }
+    
+    try {
+      const newBookmarkState = !isBookmarked;
+      setIsBookmarked(newBookmarkState);
+      
+      const result = await toggleBookmark(review._id);
+      
+      if (result && typeof result.isBookmarked !== 'undefined') {
+        setIsBookmarked(result.isBookmarked);
+      }
+      
+
+      if (onBookmarkChange) {
+        onBookmarkChange(review._id, newBookmarkState);
+      }
+    } catch (err) {
+      console.error('Error toggling bookmark:', err);
+     
+      setIsBookmarked(!isBookmarked);
+      alert('Failed to toggle bookmark. Please try again.');
+    }
+  };
+
   const formatDate = (dateString) => {
+    if (!dateString) return 'Date unavailable';
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      console.error(`Invalid date string: ${dateString}`);
+      return 'Invalid date';
+    }
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
-      month: 'short',  
+      month: 'short',
       day: 'numeric',
     });
   };
@@ -114,14 +163,14 @@ const ReviewCard = ({
             key={i}
             size={16}
             className={
-              i < Math.floor(rating)
+              i < Math.floor(rating || 0)
                 ? 'text-yellow-400 fill-yellow-400'
                 : 'text-gray-300'
             }
           />
         ))}
         <span className="ml-1 text-xs font-medium text-gray-700">
-          {rating.toFixed(1)}
+          {(rating || 0).toFixed(1)}
         </span>
       </div>
     );
@@ -149,8 +198,8 @@ const ReviewCard = ({
         <div className={viewMode === 'list' ? 'md:w-1/3' : ''}>
           <div className="relative aspect-video">
             <img
-              src={review.images[0] || '/api/placeholder/400/320'}
-              alt={review.title}
+              src={review.images && review.images[0] ? review.images[0] : '/api/placeholder/400/320'}
+              alt={review.title || 'Review image'}
               className="h-full w-full object-cover"
               loading="lazy"
               width="400"
@@ -161,7 +210,7 @@ const ReviewCard = ({
                 Featured
               </div>
             )}
-            {review.images.length > 1 && (
+            {review.images && review.images.length > 1 && (
               <div className="absolute bottom-3 right-3 bg-black bg-opacity-50 text-xs font-medium px-2 py-1 rounded-full text-white flex items-center">
                 <Image size={12} className="mr-1" />+{review.images.length - 1}
               </div>
@@ -171,9 +220,9 @@ const ReviewCard = ({
         <div className={`p-4 flex flex-col ${viewMode === 'list' ? 'md:w-2/3' : ''}`}>
           <div className="flex items-start justify-between mb-2">
             <div>
-              <h3 className="font-bold text-lg text-gray-900 mb-1">{review.title}</h3>
+              <h3 className="font-bold text-lg text-gray-900 mb-1">{review.title || 'Untitled'}</h3>
               <div className="flex items-center text-sm text-gray-500 mb-1">
-                <span className="font-medium text-gray-700">{review.restaurant}</span>
+                <span className="font-medium text-gray-700">{review.restaurant || 'Unknown Restaurant'}</span>
                 {review.location && (
                   <>
                     <span className="mx-1">•</span>
@@ -187,7 +236,7 @@ const ReviewCard = ({
               <StarRating rating={review.rating} />
             </div>
           </div>
-          <p className="text-gray-600 text-sm mb-4 line-clamp-3">{review.content}</p>
+          <p className="text-gray-600 text-sm mb-4 line-clamp-3">{review.content || 'No content available'}</p>
           {review.tags && review.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-4">
               {review.tags.map((tag) => (
@@ -204,12 +253,12 @@ const ReviewCard = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <img
-                  src={review.author.avatarUrl || '/api/placeholder/32/32'}
-                  alt={review.author.username}
+                  src={review.author?.avatarUrl || '/api/placeholder/32/32'}
+                  alt={review.author?.username || 'Unknown User'}
                   className="w-6 h-6 rounded-full mr-2"
                 />
                 <span className="text-xs font-medium text-gray-700">
-                  {review.author.username}
+                  {review.author?.username || 'Unknown User'}
                 </span>
                 <span className="mx-1 text-gray-400">•</span>
                 <span className="text-xs text-gray-500 flex items-center">
@@ -241,13 +290,14 @@ const ReviewCard = ({
                   <span className="text-xs text-gray-500">{commentCount}</span>
                 </button>
                 <button
-                  className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
+                  onClick={handleToggleBookmark}
+                  disabled={!currentUser}
+                  className="p-1.5 hover:bg-gray-100 rounded-full transition-colors flex items-center space-x-1"
                 >
-                  <Share2 size={16} className="text-gray-400" />
+                  <Bookmark
+                    size={16}
+                    className={isBookmarked ? 'fill-blue-500 text-blue-500' : 'text-gray-400'}
+                  />
                 </button>
                 {isCurrentUserAuthor && (
                   <>

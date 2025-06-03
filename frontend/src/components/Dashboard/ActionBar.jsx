@@ -8,7 +8,8 @@ const ActionBar = ({ filter, setFilter, viewMode, setViewMode, onReviewCreated }
 
   const handleCreateReview = async (formData, images) => {
     try {
-      const newBlog = await createBlog(formData, images);
+      const token = localStorage.getItem('token'); 
+      const newBlog = await createBlog(formData, images, token);
       onReviewCreated(newBlog);
       setIsModalOpen(false);
     } catch (err) {
@@ -21,7 +22,7 @@ const ActionBar = ({ filter, setFilter, viewMode, setViewMode, onReviewCreated }
       <div className="bg-white rounded-xl shadow-sm mb-6 p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap gap-2">
-            {['all', 'featured', 'my'].map((type) => (
+            {['all', 'featured', 'my', 'bookmarks'].map((type) => (
               <button
                 key={type}
                 onClick={() => setFilter(type)}
@@ -35,7 +36,9 @@ const ActionBar = ({ filter, setFilter, viewMode, setViewMode, onReviewCreated }
                   ? 'All Reviews'
                   : type === 'featured'
                   ? 'Featured'
-                  : 'My Reviews'}
+                  : type === 'my'
+                  ? 'My Reviews'
+                  : 'Bookmarked Reviews'}
               </button>
             ))}
           </div>

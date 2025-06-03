@@ -1,4 +1,5 @@
 const Blog = require("../models/Blog");
+const User = require("../models/User")
 const Like = require("../models/Like");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
@@ -7,7 +8,7 @@ exports.getAllBlogs = async (req, res) => {
   try {
     const filter = req.query.filter || "all";
     let query = {};
-
+    
     if (filter === "my") {
       if (!req.user || !req.user._id) {
         return res
@@ -27,22 +28,36 @@ exports.getAllBlogs = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    const blogsWithLikes = await Promise.all(
+    
+    let userBookmarks = [];
+    if (req.user && req.user._id) {
+      const user = await User.findById(req.user._id).select('bookmarks');
+      userBookmarks = user ? user.bookmarks.map(id => id.toString()) : [];
+    }
+
+    const blogsWithLikesAndBookmarks = await Promise.all(
       blogs.map(async (blog) => {
         const likes = await Like.find({ blogId: blog._id }).exec();
         const totalLikes = likes.length;
         const hasLiked = req.user
           ? !!(await Like.exists({ blogId: blog._id, userId: req.user._id }))
           : false;
+        
+        // Check if blog is bookmarked by current user
+        const isBookmarked = req.user 
+          ? userBookmarks.includes(blog._id.toString())
+          : false;
+
         return {
           ...blog.toObject(),
           totalLikes,
           hasLiked,
+          isBookmarked,
         };
       }),
     );
 
-    res.status(200).json(blogsWithLikes);
+    res.status(200).json(blogsWithLikesAndBookmarks);
   } catch (err) {
     console.error("Error fetching blogs:", err.message);
     res.status(500).json({ message: "Server error", error: err.message });
@@ -166,23 +181,34 @@ exports.getBlogById = async (req, res) => {
       });
 
     if (!blog) {
-      return res.status(404).json({ message: "Blog not found" });
+      return res.status(404).json({ error: "Blog not found" });
     }
 
     const likes = await Like.find({ blogId: blog._id }).exec();
     const totalLikes = likes.length;
     const hasLiked = req.user
-      ? !!(await Like.exists({ blogId: blog._id, userId: req.user._id }))
+      ? !!(await Like.findOne({ blogId: blog._id, userId: req.user._id }))
       : false;
 
+    let isBookmarked = false;
+    if (req.user && req.user._id) {
+      const user = await User.findById(req.user._id).select('bookmarks');
+      if (user && user.bookmarks) {
+        isBookmarked = user.bookmarks.some(bookmark => bookmark.toString() === blog._id.toString());
+      } else {
+        console.warn('getBlogById - No user or bookmarks found for user ID:', req.user._id);
+      }
+    } 
+
     res.status(200).json({
-      ...blog.toObject(),
+      ...blog.toJSON(),
       totalLikes,
-      hasLiked,
+      liked: hasLiked,
+      isBookmarked,
     });
-  } catch (err) {
-    console.error("Error fetching blog:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+  } catch (error) {
+    console.error('Error in getBlogById:', error);
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -337,5 +363,80 @@ exports.deleteBlog = async (req, res) => {
   } catch (err) {
     console.error("Error deleting blog:", err.message);
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// FIXED BOOKMARK METHODS - CONSISTENT USER ID USAGE
+exports.toggleBookmark = async (req, res) => {
+  try {
+    // FIXED: Use _id consistently
+    const userId = req.user._id;
+    const blogId = req.params.blogId;
+    
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    const blog = await Blog.findById(blogId);
+    if (!blog) {
+      return res.status(404).json({ error: "Blog not found" });
+    }
+    
+    const isBookmarked = user.bookmarks.some(bookmark => bookmark.toString() === blogId);
+    
+    if (isBookmarked) {
+      user.bookmarks = user.bookmarks.filter((id) => id.toString() !== blogId);
+    } else {
+      user.bookmarks.push(blogId);
+    }
+    
+    await user.save();
+    
+    
+    res.status(200).json({
+      message: `Blog ${isBookmarked ? "unbookmarked" : "bookmarked"} successfully`,
+      isBookmarked: !isBookmarked,
+    });
+  } catch (error) {
+    console.error('Error in toggleBookmark:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getBookmarkedBlogs = async (req, res) => {
+  try {
+   
+    const userId = req.user._id;
+    
+    const user = await User.findById(userId).populate({
+      path: "bookmarks",
+      populate: { path: "author", select: "username avatarUrl" },
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    const bookmarkedBlogs = await Promise.all(
+      user.bookmarks.map(async (blog) => {
+        const likes = await Like.find({ blogId: blog._id }).exec();
+        const totalLikes = likes.length;
+        const hasLiked = !!(await Like.exists({ blogId: blog._id, userId: userId }));
+        
+        return { 
+          ...blog.toJSON(), 
+          totalLikes, 
+          hasLiked,
+          isBookmarked: true // Since these are all bookmarked
+        };
+      })
+    );
+    
+    res.status(200).json(bookmarkedBlogs);
+  } catch (error) {
+    console.error('Error in getBookmarkedBlogs:', error);
+    res.status(500).json({ error: error.message });
   }
 };

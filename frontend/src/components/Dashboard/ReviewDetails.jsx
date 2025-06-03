@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   Heart,
   MessageCircle,
-  Share2,
+  Bookmark,
   Edit,
   Trash2,
   Star,
@@ -14,7 +14,7 @@ import {
   MapPin,
   X,
 } from "lucide-react";
-import { getBlogById } from "../../lib/api/Blog";
+import { getBlogById, deleteBlog, toggleBookmark } from "../../lib/api/Blog";
 import {
   createComment,
   deleteComment,
@@ -40,7 +40,9 @@ export const ReviewDetails = () => {
   const [showFullContent, setShowFullContent] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
   const [hasUserLiked, setHasUserLiked] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
   const [loadingLike, setLoadingLike] = useState(false);
+  const [loadingBookmark, setLoadingBookmark] = useState(false);
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [usersWhoLiked, setUsersWhoLiked] = useState([]);
   const [editCommentId, setEditCommentId] = useState(null);
@@ -51,11 +53,19 @@ export const ReviewDetails = () => {
     const fetchReviewDetails = async () => {
       try {
         setLoading(true);
-        const data = await getBlogById(id);
+        const token = currentUser?.token || localStorage.getItem('token');
+        const data = await getBlogById(id, token);
+        
+        
         setReview(data);
         setComments(data.comments || []);
         setLikeCount(data.totalLikes || 0);
-        setHasUserLiked(data.liked || false);
+        setHasUserLiked(data.hasLiked || data.liked || false);
+        
+        // Ensure bookmark state is properly set
+        const bookmarkStatus = data.isBookmarked === true;
+        setIsBookmarked(bookmarkStatus);
+        
         setLoading(false);
       } catch (err) {
         console.error("Error fetching review details:", err);
@@ -67,7 +77,15 @@ export const ReviewDetails = () => {
     if (id) {
       fetchReviewDetails();
     }
-  }, [id]);
+  }, [id, currentUser]);
+
+  // Additional effect to sync bookmark state when review changes
+  useEffect(() => {
+    if (review && review.hasOwnProperty('isBookmarked')) {
+      const bookmarkStatus = Boolean(review.isBookmarked);
+      setIsBookmarked(bookmarkStatus);
+    }
+  }, [review?._id, review?.isBookmarked]); // Include _id to detect when review object changes
 
   const handlePrevImage = () => {
     setCurrentImageIndex((prevIndex) =>
@@ -88,7 +106,7 @@ export const ReviewDetails = () => {
     }
     if (!newComment.trim()) return;
     try {
-      const comment = await createComment(review._id, newComment);
+      const comment = await createComment(review._id, newComment, currentUser.token);
       setComments((prev) => [comment, ...prev]);
       setNewComment("");
       setError(null);
@@ -106,7 +124,7 @@ export const ReviewDetails = () => {
     const userConfirmed = window.confirm("Do you want to delete this comment?");
     if (!userConfirmed) return;
     try {
-      await deleteComment(commentId);
+      await deleteComment(commentId, currentUser.token);
       setComments(comments.filter((comment) => comment._id !== commentId));
       setError(null);
     } catch (err) {
@@ -127,7 +145,7 @@ export const ReviewDetails = () => {
     }
     if (!editContent.trim()) return;
     try {
-      const updatedComment = await updateComment(commentId, editContent);
+      const updatedComment = await updateComment(commentId, editContent, currentUser.token);
       setComments(
         comments.map((comment) =>
           comment._id === commentId ? updatedComment : comment,
@@ -155,7 +173,7 @@ export const ReviewDetails = () => {
     if (!review || loadingLike) return;
     setLoadingLike(true);
     try {
-      const { totalLikes, liked } = await toggleLike(review._id);
+      const { totalLikes, liked } = await toggleLike(review._id, currentUser.token);
       setHasUserLiked(liked);
       setLikeCount(totalLikes);
       setError(null);
@@ -167,16 +185,73 @@ export const ReviewDetails = () => {
     }
   };
 
+  const handleToggleBookmark = async () => {
+    if (!currentUser) {
+      setError("Please log in to bookmark this review.");
+      return;
+    }
+    if (loadingBookmark) return;
+    
+    setLoadingBookmark(true);
+    
+    const previousBookmarkState = isBookmarked;
+    
+    try {
+      setIsBookmarked(!isBookmarked);
+      
+      
+      const response = await toggleBookmark(review._id, currentUser.token);
+      
+      
+      if (response && typeof response.isBookmarked !== 'undefined') {
+        setIsBookmarked(response.isBookmarked);
+      } 
+      
+      setError(null);
+    } catch (err) {
+      setIsBookmarked(previousBookmarkState);
+      setError(err.message || "Failed to toggle bookmark. Please try again.");
+    } finally {
+      setLoadingBookmark(false);
+    }
+  };
+
   const handleShowLikes = async () => {
     if (likeCount === 0) return;
     try {
-      const users = await getUsersWhoLiked(review._id);
+      const users = await getUsersWhoLiked(review._id, currentUser.token);
       setUsersWhoLiked(users);
       setShowLikesModal(true);
       setError(null);
     } catch (err) {
       console.error("Error fetching users who liked:", err);
       setError("Failed to fetch users who liked. Please try again.");
+    }
+  };
+
+  const handleEditReview = async () => {
+    try {
+      const blogData = await getBlogById(review._id, currentUser.token);
+      navigate(`/edit-review/${review._id}`, { state: { blogData } });
+    } catch (err) {
+      console.error("Error fetching review:", err);
+      setError("Failed to load review data. Please try again.");
+    }
+  };
+
+  const handleDeleteReview = async () => {
+    if (!currentUser) {
+      setError("Please log in to delete this review.");
+      return;
+    }
+    const userConfirmed = window.confirm("Do you want to delete this review?");
+    if (!userConfirmed) return;
+    try {
+      await deleteBlog(review._id, currentUser.token);
+      navigate("/reviews");
+    } catch (err) {
+      console.error("Error deleting review:", err);
+      setError("Failed to delete review. Please try again.");
     }
   };
 
@@ -343,10 +418,16 @@ export const ReviewDetails = () => {
               <div className="flex space-x-2">
                 {review.author._id === currentUser?._id && (
                   <>
-                    <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <button
+                      onClick={handleEditReview}
+                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    >
                       <Edit size={20} className="text-gray-500" />
                     </button>
-                    <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <button
+                      onClick={handleDeleteReview}
+                      className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    >
                       <Trash2 size={20} className="text-gray-500" />
                     </button>
                   </>
@@ -442,9 +523,30 @@ export const ReviewDetails = () => {
                     {comments.length === 1 ? "Comment" : "Comments"}
                   </span>
                 </button>
-                <button className="flex items-center space-x-2 text-gray-600 hover:text-gray-900">
-                  <Share2 size={20} />
-                  <span>Share</span>
+                <button
+                  onClick={handleToggleBookmark}
+                  disabled={!currentUser || loadingBookmark}
+                  className={`flex items-center space-x-2 hover:text-gray-900 disabled:opacity-50 transition-all duration-200 ${
+                    isBookmarked ? "text-blue-600" : "text-gray-600"
+                  }`}
+                  title={isBookmarked ? "Remove from bookmarks" : "Add to bookmarks"}
+                >
+                  <Bookmark
+                    size={20}
+                    className={`transition-all duration-200 ${
+                      isBookmarked 
+                        ? "fill-blue-500 text-blue-500 stroke-blue-500" 
+                        : "text-gray-400 hover:text-gray-600"
+                    }`}
+                  />
+                  <span className="font-medium">
+                    {loadingBookmark 
+                      ? "Loading..." 
+                      : isBookmarked 
+                        ? "Bookmarked" 
+                        : "Bookmark"
+                    }
+                  </span>
                 </button>
               </div>
             </div>

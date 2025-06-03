@@ -1,33 +1,47 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
-import { getAllBlogs } from "../lib/api/Blog";
-import Navbar from "../components/Navbar/Navbar";
-import Header from "../components/Dashboard/Header";
-import ActionBar from "../components/Dashboard/ActionBar";
-import ReviewList from "../components/Dashboard/ReviewList";
+import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { getAllBlogs, getBookmarkedBlogs, toggleBookmark } from '../lib/api/Blog';
+import Navbar from '../components/Navbar/Navbar';
+import Header from '../components/Dashboard/Header';
+import ActionBar from '../components/Dashboard/ActionBar';
+import ReviewList from '../components/Dashboard/ReviewList';
 
 const Dashboard = () => {
   const { currentUser } = useAuth();
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [showComments, setShowComments] = useState({});
-  const [newComment, setNewComment] = useState("");
-  const [viewMode, setViewMode] = useState("grid");
+  const [newComment, setNewComment] = useState('');
+  const [viewMode, setViewMode] = useState('grid');
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedReview, setSelectedReview] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchReviews = async () => {
       try {
         setLoading(true);
-        const data = await getAllBlogs(filter, currentUser?.id);
-        
-        setReviews(data);
-        setLoading(false);
+        setError(null);
+        const token = currentUser?.token || localStorage.getItem('token');
+        let data;
+        if (filter === 'bookmarks') {
+          data = await getBookmarkedBlogs(token);
+        } else {
+          data = await getAllBlogs(token);
+          data = data.filter((review) => {
+            if (filter === 'featured') return review.isFeatured;
+            if (filter === 'my') return review.author?._id === currentUser?.id;
+            return true;
+          });
+        }
+        setReviews(Array.isArray(data) ? data : []);
       } catch (err) {
-        console.error("Error fetching reviews:", err);
+        console.error('Error fetching reviews:', err);
+        setError('Failed to load reviews. Please try again.');
+        setReviews([]);
+      } finally {
         setLoading(false);
       }
     };
@@ -51,8 +65,7 @@ const Dashboard = () => {
     setSelectedReview(null);
   };
 
-  const handleEditReview = async (reviewId, blogData) => {
-   
+  const handleEditReview = (reviewId, blogData) => {
     if (reviewId && blogData) {
       setSelectedReview(blogData);
       setIsUpdateModalOpen(true);
@@ -62,57 +75,44 @@ const Dashboard = () => {
     }
   };
 
-  const toggleLike = async (reviewId) => {
+  const handleToggleBookmark = async (reviewId) => {
+    if (!currentUser) {
+      setError('Please log in to bookmark reviews.');
+      return;
+    }
     try {
-      setReviews(
-        reviews.map((review) => {
-          if (review._id === reviewId) {
-            const userAlreadyLiked = review.likes.some(
-              (like) => like._id === currentUser.id
-            );
-            if (userAlreadyLiked) {
-              return {
-                ...review,
-                likes: review.likes.filter(
-                  (like) => like._id !== currentUser.id
-                ),
-              };
-            } else {
-              return {
-                ...review,
-                likes: [
-                  ...review.likes,
-                  { _id: currentUser.id, username: currentUser.username },
-                ],
-              };
-            }
-          }
-          return review;
-        })
+      const token = currentUser?.token || localStorage.getItem('token');
+      const response = await toggleBookmark(reviewId, token);
+      setReviews((prev) =>
+        prev.map((review) =>
+          review._id === reviewId
+            ? { ...review, isBookmarked: response.isBookmarked }
+            : review
+        )
       );
+      if (filter === 'bookmarks') {
+        const data = await getBookmarkedBlogs(token);
+        setReviews(Array.isArray(data) ? data : []);
+      }
     } catch (err) {
-      console.error("Error toggling like:", err);
+      console.error('Error toggling bookmark:', err);
+      setError('Failed to toggle bookmark. Please try again.');
     }
   };
 
-  const handleDeleteReview = async (reviewId) => {
-    try {
-      setReviews(reviews.filter((review) => review._id !== reviewId));
-    } catch (err) {
-      console.error("Error deleting review:", err);
-    }
+  const handleDeleteReview = (reviewId) => {
+    setReviews((prev) => prev.filter((review) => review._id !== reviewId));
   };
 
   const toggleCommentSection = (reviewId) => {
-    setShowComments({
-      ...showComments,
-      [reviewId]: !showComments[reviewId],
-    });
+    setShowComments((prev) => ({
+      ...prev,
+      [reviewId]: !prev[reviewId],
+    }));
   };
 
-  const handleAddComment = async (reviewId) => {
+  const handleAddComment = (reviewId) => {
     if (!newComment.trim()) return;
-
     try {
       const commentToAdd = {
         _id: `temp-${Date.now()}`,
@@ -121,37 +121,36 @@ const Dashboard = () => {
           username: currentUser.username,
           avatar:
             currentUser.avatar ||
-            "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3",
+            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-4.0.3',
         },
         createdAt: new Date().toISOString(),
       };
 
-      setReviews(
-        reviews.map((review) => {
-          if (review._id === reviewId) {
-            return {
-              ...review,
-              comments: [...review.comments, commentToAdd],
-            };
-          }
-          return review;
-        })
+      setReviews((prev) =>
+        prev.map((review) =>
+          review._id === reviewId
+            ? {
+                ...review,
+                comments: [...review.comments, commentToAdd],
+              }
+            : review
+        )
       );
-
-      setNewComment("");
+      setNewComment('');
     } catch (err) {
-      console.error("Error adding comment:", err);
+      console.error('Error adding comment:', err);
+      setError('Failed to add comment. Please try again.');
     }
   };
 
-  const filteredReviews = reviews.filter((review) => {
+  const filteredReviews = (reviews || []).filter((review) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
-      review.title.toLowerCase().includes(searchLower) ||
-      review.tags.some((tag) => tag.toLowerCase().includes(searchLower)) ||
-      review.author.username.toLowerCase().includes(searchLower) ||
-      review.rating.toString().includes(searchLower)
+      (review.title || '').toLowerCase().includes(searchLower) ||
+      (review.tags || []).some((tag) => tag.toLowerCase().includes(searchLower)) ||
+      (review.author?.username || '').toLowerCase().includes(searchLower) ||
+      (review.rating || '').toString().includes(searchLower)
     );
   });
 
@@ -172,6 +171,11 @@ const Dashboard = () => {
         setSearchTerm={setSearchTerm}
       />
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
         <ActionBar
           filter={filter}
           setFilter={setFilter}
@@ -185,7 +189,6 @@ const Dashboard = () => {
           viewMode={viewMode}
           currentUser={currentUser}
           showComments={showComments}
-          toggleLike={toggleLike}
           toggleCommentSection={toggleCommentSection}
           handleDeleteReview={handleDeleteReview}
           handleAddComment={handleAddComment}
@@ -197,6 +200,7 @@ const Dashboard = () => {
           selectedReview={selectedReview}
           handleReviewUpdated={handleReviewUpdated}
           onEditReview={handleEditReview}
+          toggleBookmark={handleToggleBookmark}
         />
       </div>
       <footer className="bg-white">

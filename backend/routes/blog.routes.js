@@ -7,8 +7,12 @@ const upload = require('../middleware/multer');
 // Blog routes
 router.post('/', verifyToken, blogController.createBlog);
 router.get('/', verifyToken, blogController.getAllBlogs);
-router.get('/:id', blogController.getBlogById);
+
+router.get("/bookmarks", verifyToken, blogController.getBookmarkedBlogs);
+router.post("/:blogId/bookmark", verifyToken, blogController.toggleBookmark);
+
+router.get('/:id', verifyToken, blogController.getBlogById);
 router.put('/:id', verifyToken, blogController.updateBlog);
 router.delete('/:id', verifyToken, blogController.deleteBlog);
 
-module.exports =  router;
+module.exports = router;
