@@ -10,6 +10,8 @@ A full-stack web application for food enthusiasts to share, review, and discover
 - **Reviews:** Create, view, and search reviews with titles, content, restaurant details, ratings, tags, and images.
 - **Social Features:** Comment and like posts.
 - **Search:** Filter reviews by title, tags, author, or rating from the dashboard.
+- **Notification:** User get notification for comment and likes.
+- **Bookmark:** Reviews can be bookmarked for later to read.
 - **Responsive UI:** Clean, modern design with modals for creating reviews and editing profiles.
 - **Image Uploads:** Upload profile images and review images (JPEG/JPG/PNG, ≤32MB) using ImgBB.
 - **Authorization:** Google authentication for login.
@@ -20,7 +22,7 @@ A full-stack web application for food enthusiasts to share, review, and discover
 
 ## 🎥 Demo
 
-Watch a demo of the application in action: [Google Drive Link](#) *(https://drive.google.com/file/d/1xpIvvADz_kACHvt9bhRr9nOHJHQPjF5c/view?usp=sharing)*
+Watch a demo of the application in action: [Google Drive Link](#) *(https://drive.google.com/file/d/1WZEh2fD8y14bs5KoJWi7QlqrpDuw50Z4/view?usp=sharing)*
 
 ---
 
