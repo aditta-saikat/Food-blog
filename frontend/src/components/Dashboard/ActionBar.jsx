@@ -38,7 +38,7 @@ const ActionBar = ({ filter, setFilter, viewMode, setViewMode, onReviewCreated }
                   ? 'Featured'
                   : type === 'my'
                   ? 'My Reviews'
-                  : 'Bookmarked Reviews'}
+                  : 'Bookmarks'}
               </button>
             ))}
           </div>
